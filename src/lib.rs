@@ -41,6 +41,35 @@ fn match_literal(expected: &'static str) -> impl Fn(&str) -> Result<(&str, ()), 
 // I suppose since the input is not declared in the func signature, it'll be
 // captured in the returned closure.
 
+/// match_literal will let us parse <, >, even </ or /> but to parse the Element
+/// name, we need a few more changes to how we do things. We can't rely on
+/// simple string comparisons however we could use regex (which is slgihtly to
+/// heavy).
+/// Instead, we can rely on the rules and assumptions we made for this parser:
+/// an element name identifier may have one alphabetical character, followed by
+/// zxero or more of either an alphabetical character, a number or a dash.
+fn identifier(input: &str) -> Result<(&str, String), &str> {
+    let mut matched = String::new();
+    let mut chars = input.chars();
+
+    // Make sure first char is alphabetic
+    match chars.next() {
+        Some(next) if next.is_alphabetic() => matched.push(next),
+        _ => return Err(input),
+    }
+
+    while let Some(next) = chars.next() {
+        if next.is_alphanumeric() || next == '-' {
+            matched.push(next);
+        } else {
+            break;
+        }
+    }
+
+    let next_index = matched.len();
+    Ok((&input[next_index..], matched))
+}
+
 // ==== TESTS =====
 #[test]
 fn literal_parser() {
