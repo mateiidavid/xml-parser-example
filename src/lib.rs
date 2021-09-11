@@ -11,10 +11,29 @@ pub struct Element {
     children: Vec<Element>,
 }
 
+// Lifetime added here because type declaration requires it, Rust compiler
+// should be able to infer it a lot of times tho.
+type ParseResult<'a, Output> = Result<(&'a str, Output), &'a str>;
+
+// We can implement the trait for any function that matches the signature of a
+// parser
+trait Parser<'a, Output> {
+    fn parse(&self, input: &'a str) -> ParseResult<'a, Output>;
+}
+
+impl<'a, F, Output> Parser<'a, Output> for F
+where
+    F: Fn(&'a str) -> ParseResult<Output>,
+{
+    fn parse(&self, input: &'a str) -> ParseResult<'a, Output> {
+        self(input)
+    }
+}
+
 /* "Parsing is the process of deriving a structure from a stream of data"
  * in this sense, a parser "teases" out that structure.
- * At a fundamental level, a parser may just a single fn that accepts an input
- * and returns either the parsed structure or an error.
+ * At a fundamental level, a parser may just a single fn that accepts an
+ * input and returns either the parsed structure or an error.
  * Fn(Input) --> Result<(Input, Output), Error>
  */
 
@@ -22,6 +41,7 @@ pub struct Element {
 // to chop input as we process; could use bytez too
 // type ParseFn = Fn(&str) -> Result<(&str, Element), &str>;
 type ParseFn = fn(&str) -> Result<(&str, ()), &str>;
+
 /// match_literal is a function that builds a parser to find a static string of
 /// any lengrth in a given input stream. It returns a Unit if the 'needle' has
 /// been found successfully, along with the rest of the input (minus our
@@ -97,12 +117,16 @@ where
         Err(e) => Err(e),
     }
 }
-fn map<P, F, A, B>(parser: P, map_fn: F) -> impl Fn(&str) -> Result<(&str, B), &str>
+fn map<'a, P, F, A, B>(parser: P, map_fn: F) -> impl Parser<'a, B>
 where
-    P: Fn(&str) -> Result<(&str, A), &str>,
+    P: Parser<'a, A>,
     F: Fn(A) -> B,
 {
-    move |input| parser(input).map(|(next_input, result)| (next_input, map_fn(result)))
+    move |input| {
+        parser
+            .parse(input)
+            .map(|(next_input, result)| (next_input, map_fn(result)))
+    }
 }
 
 // ==== TESTS =====
