@@ -53,6 +53,8 @@ fn identifier(input: &str) -> Result<(&str, String), &str> {
     let mut chars = input.chars();
 
     // Make sure first char is alphabetic
+    // what we do here is basically replace regex with our own code; that is, go
+    // char by char n make sure it's valid.
     match chars.next() {
         Some(next) if next.is_alphabetic() => matched.push(next),
         _ => return Err(input),
@@ -70,6 +72,32 @@ fn identifier(input: &str) -> Result<(&str, String), &str> {
     Ok((&input[next_index..], matched))
 }
 
+// Parser combinator: takes in two parsers as input and returns a parser that
+// uses the two parsers passed to it in order. In our case, it will parse
+// literals and identifiers (the order being up to us but ofc has to be
+// according to spec).
+
+/// pair combines two parser functions, each with its own result. The function
+/// takes in two parsers that each return a Result with a tuple of the remaining
+/// input and a result, and returns a function that will apply the parsers to an
+/// input string in order. e.g first we would match a literal, return the result
+/// and the rest of the input, on the input we then apply another parser to find
+/// an identifier and at the end return whatever's left of the initial input
+/// string as well as the two results from the parsers.
+fn pair<F1, F2, R1, R2>(parser1: F1, parser2: F2) -> impl Fn(&str) -> Result<(&str, (R1, R2)), &str>
+where
+    F1: Fn(&str) -> Result<(&str, R1), &str>,
+    F2: Fn(&str) -> Result<(&str, R2), &str>,
+{
+    move |input| match parser1(input) {
+        Ok((next_input, result)) => match parser2(next_input) {
+            Ok((final_input, final_result)) => Ok((final_input, (result, final_result))),
+            Err(e) => Err(e),
+        },
+        Err(e) => Err(e),
+    }
+}
+
 // ==== TESTS =====
 #[test]
 fn literal_parser() {
@@ -82,4 +110,43 @@ fn literal_parser() {
     assert_eq!(Err("Hello, bromandude"), parse_joe("Hello, bromandude"));
     let input = "Dear all, welcome to this fine evening. I am here to tell you that you need to do something...for further directions, read on. I have no idea what I'm saying. Hello, Joe! Ya alright m8";
     //assert_eq!(Ok((" Ya alright m8", ())), parse_joe(input));
+}
+
+#[test]
+fn identifier_parser() {
+    // Test we alphanumeric + dash
+    assert_eq!(Ok((" ", "input-123".to_string())), identifier("input-123 "));
+
+    // Test entirely identifier
+    assert_eq!(
+        Ok(("", "i-am-identifier".to_string())),
+        identifier("i-am-identifier")
+    );
+
+    // Test err
+    assert_eq!(Err("<invalidinput>"), identifier("<invalidinput>"));
+}
+
+#[test]
+fn pair_combinator() {
+    let parse_bracket = match_literal("[");
+
+    let input = "[my-name-Jeff";
+    let no_remaining_in = pair(parse_bracket, identifier);
+    assert_eq!(
+        Ok(("", ((), "my-name-Jeff".to_string()))),
+        no_remaining_in(input)
+    );
+
+    let tag_opener = pair(match_literal("<"), identifier);
+    let tag_good_input = "<Element1/>";
+    assert_eq!(
+        Ok(("/>", ((), "Element1".to_string()))),
+        tag_opener(tag_good_input),
+    );
+
+    let tag_bad_input = "Element1/>";
+    assert_eq!(Err("Element1/>"), tag_opener(tag_bad_input));
+    let tag_bad_input = "<1Element/>";
+    assert_eq!(Err("1Element/>"), tag_opener(tag_bad_input));
 }
