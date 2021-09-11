@@ -102,10 +102,7 @@ where
     P: Fn(&str) -> Result<(&str, A), &str>,
     F: Fn(A) -> B,
 {
-    move |input| match parser(input) {
-        Ok((next_input, result)) => Ok((next_input, map_fn(result))),
-        Err(err) => Err(err),
-    }
+    move |input| parser(input).map(|(next_input, result)| (next_input, map_fn(result)))
 }
 
 // ==== TESTS =====
