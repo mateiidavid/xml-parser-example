@@ -109,12 +109,12 @@ where
     F1: Parser<'a, R1>,
     F2: Parser<'a, R2>,
 {
-    move |input| match parser1.parse(input) {
-        Ok((next_input, result)) => match parser2.parse(next_input) {
-            Ok((final_input, final_result)) => Ok((final_input, (result, final_result))),
-            Err(e) => Err(e),
-        },
-        Err(e) => Err(e),
+    move |input| {
+        parser1.parse(input).and_then(|(next, result)| {
+            parser2
+                .parse(next)
+                .map(|(final_input, second_result)| (final_input, (result, second_result)))
+        })
     }
 }
 fn map<'a, P, F, A, B>(parser: P, map_fn: F) -> impl Parser<'a, B>
