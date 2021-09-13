@@ -104,13 +104,13 @@ fn identifier(input: &str) -> Result<(&str, String), &str> {
 /// and the rest of the input, on the input we then apply another parser to find
 /// an identifier and at the end return whatever's left of the initial input
 /// string as well as the two results from the parsers.
-fn pair<F1, F2, R1, R2>(parser1: F1, parser2: F2) -> impl Fn(&str) -> Result<(&str, (R1, R2)), &str>
+fn pair<'a, F1, F2, R1, R2>(parser1: F1, parser2: F2) -> impl Parser<'a, (R1, R2)>
 where
-    F1: Fn(&str) -> Result<(&str, R1), &str>,
-    F2: Fn(&str) -> Result<(&str, R2), &str>,
+    F1: Parser<'a, R1>,
+    F2: Parser<'a, R2>,
 {
-    move |input| match parser1(input) {
-        Ok((next_input, result)) => match parser2(next_input) {
+    move |input| match parser1.parse(input) {
+        Ok((next_input, result)) => match parser2.parse(next_input) {
             Ok((final_input, final_result)) => Ok((final_input, (result, final_result))),
             Err(e) => Err(e),
         },
