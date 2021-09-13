@@ -46,8 +46,8 @@ type ParseFn = fn(&str) -> Result<(&str, ()), &str>;
 /// any lengrth in a given input stream. It returns a Unit if the 'needle' has
 /// been found successfully, along with the rest of the input (minus our
 /// 'needle').
-fn match_literal(expected: &'static str) -> impl Fn(&str) -> Result<(&str, ()), &str> {
-    move |input| match input.strip_prefix(expected) {
+fn match_literal<'a>(expected: &'static str) -> impl Parser<'a, ()> {
+    move |input: &'a str| match input.strip_prefix(expected) {
         // Here we get the len because...never presume about the length of the unicode
         // monster.
         Some(stripped_in) => Ok((stripped_in, ())),
@@ -68,7 +68,7 @@ fn match_literal(expected: &'static str) -> impl Fn(&str) -> Result<(&str, ()), 
 /// Instead, we can rely on the rules and assumptions we made for this parser:
 /// an element name identifier may have one alphabetical character, followed by
 /// zxero or more of either an alphabetical character, a number or a dash.
-fn identifier(input: &str) -> Result<(&str, String), &str> {
+fn identifier(input: &str) -> ParseResult<String> {
     let mut matched = String::new();
     let mut chars = input.chars();
 
@@ -150,12 +150,15 @@ where
 #[test]
 fn literal_parser() {
     let parse_joe = match_literal("Hello, Joe!");
-    assert_eq!(Ok(("", ())), parse_joe("Hello, Joe!"));
+    assert_eq!(Ok(("", ())), parse_joe.parse("Hello, Joe!"));
     assert_eq!(
         Ok(((" Hello, Jack!"), ())),
-        parse_joe("Hello, Joe! Hello, Jack!")
+        parse_joe.parse("Hello, Joe! Hello, Jack!")
     );
-    assert_eq!(Err("Hello, bromandude"), parse_joe("Hello, bromandude"));
+    assert_eq!(
+        Err("Hello, bromandude"),
+        parse_joe.parse("Hello, bromandude")
+    );
     let input = "Dear all, welcome to this fine evening. I am here to tell you that you need to do something...for further directions, read on. I have no idea what I'm saying. Hello, Joe! Ya alright m8";
     //assert_eq!(Ok((" Ya alright m8", ())), parse_joe(input));
 }
@@ -176,25 +179,16 @@ fn identifier_parser() {
 }
 
 #[test]
-fn pair_combinator() {
-    let parse_bracket = match_literal("[");
-
-    let input = "[my-name-Jeff";
-    let no_remaining_in = pair(parse_bracket, identifier);
-    assert_eq!(
-        Ok(("", ((), "my-name-Jeff".to_string()))),
-        no_remaining_in(input)
-    );
-
-    let tag_opener = pair(match_literal("<"), identifier);
+fn right_combinator() {
+    let tag_opener = right(match_literal("<"), identifier);
     let tag_good_input = "<Element1/>";
     assert_eq!(
-        Ok(("/>", ((), "Element1".to_string()))),
-        tag_opener(tag_good_input),
+        Ok(("/>", "Element1".to_string())),
+        tag_opener.parse(tag_good_input),
     );
 
     let tag_bad_input = "Element1/>";
-    assert_eq!(Err("Element1/>"), tag_opener(tag_bad_input));
+    assert_eq!(Err("Element1/>"), tag_opener.parse(tag_bad_input));
     let tag_bad_input = "<1Element/>";
-    assert_eq!(Err("1Element/>"), tag_opener(tag_bad_input));
+    assert_eq!(Err("1Element/>"), tag_opener.parse(tag_bad_input));
 }
