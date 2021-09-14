@@ -92,6 +92,49 @@ fn identifier(input: &str) -> ParseResult<String> {
     Ok((&input[next_index..], matched))
 }
 
+// Combines one or more parsers, useful for whitespaces
+fn one_or_more<'a, P, A>(parser: P) -> impl Parser<'a, Vec<A>>
+where
+    P: Parser<'a, A>,
+{
+    move |mut input| {
+        let mut result = Vec::new();
+
+        // First, parse the first element, if it's a success, push it into the
+        // vec.
+        if let Ok((next_input, item)) = parser.parse(input) {
+            input = next_input;
+            result.push(item);
+        } else {
+            return Err(input);
+        }
+
+        // Second, keep parsing until we bump into an error
+        while let Ok((next_input, next_item)) = parser.parse(input) {
+            input = next_input;
+            result.push(next_item);
+        }
+
+        Ok((input, result))
+    }
+}
+
+fn zero_or_more<'a, P, A>(parser: P) -> impl Parser<'a, Vec<A>>
+where
+    P: Parser<'a, A>,
+{
+    move |mut input| {
+        let mut result = Vec::new();
+
+        while let Ok((next_input, next_item)) = parser.parse(input) {
+            input = next_input;
+            result.push(next_item);
+        }
+
+        Ok((input, result))
+    }
+}
+
 // Parser combinator: takes in two parsers as input and returns a parser that
 // uses the two parsers passed to it in order. In our case, it will parse
 // literals and identifiers (the order being up to us but ofc has to be
@@ -191,4 +234,20 @@ fn right_combinator() {
     assert_eq!(Err("Element1/>"), tag_opener.parse(tag_bad_input));
     let tag_bad_input = "<1Element/>";
     assert_eq!(Err("1Element/>"), tag_opener.parse(tag_bad_input));
+}
+
+#[test]
+fn one_or_more_combinator() {
+    let parser = one_or_more(match_literal("foo"));
+    assert_eq!(Ok(("", vec![(), ()])), parser.parse("foofoo"));
+    assert_eq!(Ok(("bar", vec![(), ()])), parser.parse("foofoobar"));
+    assert_eq!(Err("barfoo"), parser.parse("barfoo"));
+}
+
+#[test]
+fn zero_or_more_combinator() {
+    let parser = zero_or_more(match_literal("foo"));
+    assert_eq!(Ok(("", vec![(), ()])), parser.parse("foofoo"));
+    assert_eq!(Ok(("bar", vec![(), ()])), parser.parse("foofoobar"));
+    assert_eq!(Ok(("barfoo", vec![])), parser.parse("barfoo"));
 }
