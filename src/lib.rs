@@ -92,49 +92,6 @@ fn identifier(input: &str) -> ParseResult<String> {
     Ok((&input[next_index..], matched))
 }
 
-// Combines one or more parsers, useful for whitespaces
-fn one_or_more<'a, P, A>(parser: P) -> impl Parser<'a, Vec<A>>
-where
-    P: Parser<'a, A>,
-{
-    move |mut input| {
-        let mut result = Vec::new();
-
-        // First, parse the first element, if it's a success, push it into the
-        // vec.
-        if let Ok((next_input, item)) = parser.parse(input) {
-            input = next_input;
-            result.push(item);
-        } else {
-            return Err(input);
-        }
-
-        // Second, keep parsing until we bump into an error
-        while let Ok((next_input, next_item)) = parser.parse(input) {
-            input = next_input;
-            result.push(next_item);
-        }
-
-        Ok((input, result))
-    }
-}
-
-fn zero_or_more<'a, P, A>(parser: P) -> impl Parser<'a, Vec<A>>
-where
-    P: Parser<'a, A>,
-{
-    move |mut input| {
-        let mut result = Vec::new();
-
-        while let Ok((next_input, next_item)) = parser.parse(input) {
-            input = next_input;
-            result.push(next_item);
-        }
-
-        Ok((input, result))
-    }
-}
-
 // Parser combinator: takes in two parsers as input and returns a parser that
 // uses the two parsers passed to it in order. In our case, it will parse
 // literals and identifiers (the order being up to us but ofc has to be
@@ -187,6 +144,75 @@ where
     P2: Parser<'a, R2>,
 {
     map(pair(parser1, parser2), |(_left, right)| right)
+}
+
+// Combines one or more parsers, useful for whitespaces
+fn one_or_more<'a, P, A>(parser: P) -> impl Parser<'a, Vec<A>>
+where
+    P: Parser<'a, A>,
+{
+    move |mut input| {
+        let mut result = Vec::new();
+
+        // First, parse the first element, if it's a success, push it into the
+        // vec.
+        if let Ok((next_input, item)) = parser.parse(input) {
+            input = next_input;
+            result.push(item);
+        } else {
+            return Err(input);
+        }
+
+        // Second, keep parsing until we bump into an error
+        while let Ok((next_input, next_item)) = parser.parse(input) {
+            input = next_input;
+            result.push(next_item);
+        }
+
+        Ok((input, result))
+    }
+}
+
+fn zero_or_more<'a, P, A>(parser: P) -> impl Parser<'a, Vec<A>>
+where
+    P: Parser<'a, A>,
+{
+    move |mut input| {
+        let mut result = Vec::new();
+
+        while let Ok((next_input, next_item)) = parser.parse(input) {
+            input = next_input;
+            result.push(next_item);
+        }
+
+        Ok((input, result))
+    }
+}
+
+fn any_char(input: &str) -> ParseResult<char> {
+    match input.chars().next() {
+        Some(next) => Ok((&input[next.len_utf8()..], next)),
+        _ => Err(input),
+    }
+}
+
+fn pred<'a, P, F, A>(parser: P, pred_fn: F) -> impl Parser<'a, A>
+where
+    P: Parser<'a, A>,
+    F: Fn(&A) -> bool,
+{
+    move |input| {
+        if let Ok((next, val)) = parser.parse(input) {
+            if pred_fn(&val) {
+                return Ok((next, val));
+            }
+        }
+        Err(input)
+    }
+}
+
+fn whitespace_parser<'a>() -> impl Parser<'a, char> {
+    pred(any_char, |c| c.is_whitespace())
 }
 
 // ==== TESTS =====
@@ -250,4 +276,11 @@ fn zero_or_more_combinator() {
     assert_eq!(Ok(("", vec![(), ()])), parser.parse("foofoo"));
     assert_eq!(Ok(("bar", vec![(), ()])), parser.parse("foofoobar"));
     assert_eq!(Ok(("barfoo", vec![])), parser.parse("barfoo"));
+}
+
+#[test]
+fn is_whitespace_pred() {
+    let parser = pred(any_char, |c| *c == 'o');
+    assert_eq!(Ok(("mg", 'o')), parser.parse("omg"));
+    assert_eq!(Err("nmg"), parser.parse("omg"));
 }
