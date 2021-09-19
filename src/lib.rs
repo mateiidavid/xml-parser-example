@@ -324,4 +324,14 @@ fn zero_or_more_attributes() {
         Ok(("", vec![("Key".to_string(), "Value".to_string())])),
         parser.parse("  Key=\"Value\"")
     );
+    assert_eq!(
+        Ok((
+            "",
+            vec![
+                ("k1".to_string(), "v1".to_string()),
+                ("k2".to_string(), "v2".to_string())
+            ]
+        )),
+        parser.parse("  k1=\"v1\" k2=\"v2\"")
+    );
 }
