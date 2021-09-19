@@ -219,6 +219,19 @@ fn space1<'a>() -> impl Parser<'a, Vec<char>> {
     one_or_more(whitespace_char())
 }
 
+fn quoted_string<'a>() -> impl Parser<'a, String> {
+    map(
+        right(
+            match_literal("\""),
+            left(
+                zero_or_more(pred(any_char, |c| *c != '"')),
+                match_literal("\""),
+            ),
+        ),
+        |chars| chars.into_iter().collect(),
+    )
+}
+
 // ==== TESTS =====
 #[test]
 fn literal_parser() {
@@ -286,5 +299,12 @@ fn zero_or_more_combinator() {
 fn is_whitespace_pred() {
     let parser = pred(any_char, |c| *c == 'o');
     assert_eq!(Ok(("mg", 'o')), parser.parse("omg"));
-    assert_eq!(Err("nmg"), parser.parse("omg"));
+    assert_eq!(Err("nmg"), parser.parse("nmg"));
+}
+
+#[test]
+fn quoted_strings() {
+    let parser = quoted_string();
+    assert_eq!(Ok(("", "abc".to_string())), parser.parse("\"abc\""));
+    assert_eq!(Err(""), parser.parse("\""));
 }
