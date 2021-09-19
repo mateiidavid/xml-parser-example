@@ -211,8 +211,12 @@ where
     }
 }
 
-fn whitespace_parser<'a>() -> impl Parser<'a, char> {
+fn whitespace_char<'a>() -> impl Parser<'a, char> {
     pred(any_char, |c| c.is_whitespace())
+}
+
+fn space1<'a>() -> impl Parser<'a, Vec<char>> {
+    one_or_more(whitespace_char())
 }
 
 // ==== TESTS =====
