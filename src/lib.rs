@@ -240,6 +240,29 @@ fn attributes<'a>() -> impl Parser<'a, Vec<(String, String)>> {
     zero_or_more(right(space1(), attribute_pair()))
 }
 
+/// The start of an XML element. If we see "<" and an identifier, followed by
+/// zero or more attributes, then we know we started an XML attribute.
+fn element_start<'a>() -> impl Parser<'a, (String, Vec<(String, String)>)> {
+    right(match_literal("<"), pair(identifier, attributes()))
+}
+
+/// Use element_start combinator to parse an Element. What happens is, we first
+/// pair up element_start and literal /> that signals an Element ends. We take
+/// the output of element_start through left() combinator. At the end, we're
+/// left with the actual output from pair(identifier, attributes) which will
+/// give us the name of the element and its attributes. Only thing left is to
+/// map this output to an actual element.
+fn single_element<'a>() -> impl Parser<'a, Element> {
+    map(
+        left(element_start(), match_literal("/>")),
+        |(name, attributes)| Element {
+            name,
+            attributes,
+            children: vec![],
+        },
+    )
+}
+
 // ==== TESTS =====
 #[test]
 fn literal_parser() {
@@ -333,5 +356,20 @@ fn zero_or_more_attributes() {
             ]
         )),
         parser.parse("  k1=\"v1\" k2=\"v2\"")
+    );
+}
+
+#[test]
+fn single_element_parser() {
+    assert_eq!(
+        Ok((
+            "",
+            Element {
+                name: "div".to_string(),
+                attributes: vec![("class".to_string(), "float".to_string())],
+                children: vec![],
+            }
+        )),
+        single_element().parse("<div class=\"float\"/>")
     );
 }
