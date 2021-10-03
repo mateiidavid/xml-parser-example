@@ -38,6 +38,17 @@ trait Parser<'a, Output> {
     {
         BoxedParser::new(pred(self, pred_fn))
     }
+
+    fn and_then<B, F, P>(self, f: F) -> BoxedParser<'a, B>
+    where
+        Self: Sized + 'a,
+        Output: 'a,
+        B: 'a,
+        P: Parser<'a, B> + 'a,
+        F: Fn(Output) -> P + 'a,
+    {
+        BoxedParser::new(and_then(self, f))
+    }
     //TODO: zero_or_more, pair, one_or_more. Leave L-R as is
 }
 
@@ -326,7 +337,7 @@ where
 
 /// Either a parent or a single element.
 fn element<'a>() -> impl Parser<'a, Element> {
-    either(single_element(), open_element())
+    either(single_element(), parent_element())
 }
 
 /// Is a parent element closed? We expect </ and the name of the element
@@ -338,10 +349,29 @@ fn close_element<'a>(expected_name: String) -> impl Parser<'a, String> {
 
 /// Gives us a parent element, children and all
 fn parent_element<'a>() -> impl Parser<'a, Element> {
-    pair(
-        open_element(),
-        left(zero_or_more(element()), close_element()),
-    )
+    open_element().and_then(|el| {
+        left(zero_or_more(element()), close_element(el.name.clone())).map(move |children| {
+            let mut el = el.clone();
+            el.children = children;
+            el
+        })
+    })
+}
+
+/// and_then is a special type of combinator. It allows us to run a fn with the
+/// previous parser's output, as input. Sort of like in Result/Option just a bit
+/// trickeir when we don't work exclusively w/ data. It can help us lazily
+/// generate the right version fo close element parser.
+fn and_then<'a, P, F, A, B, NextP>(parser: P, f: F) -> impl Parser<'a, B>
+where
+    P: Parser<'a, A>,
+    NextP: Parser<'a, B>,
+    F: Fn(A) -> NextP,
+{
+    move |input| match parser.parse(input) {
+        Ok((next_input, result)) => f(result).parse(next_input),
+        Err(err) => Err(err),
+    }
 }
 
 // ==== TESTS =====
